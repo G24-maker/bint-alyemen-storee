@@ -1,5 +1,6 @@
-Flask==3.0.0
-Flask-CORS==4.0.0
-SQLAlchemy==2.0.23
-python-dotenv==1.0.0
-Gunicorn==21.2.0
+# Example of a requirements file
+
+# Dependency versions compatible with Python 3.11
+package1==1.0.0
+package2>=2.0.0
+# add other packages as necessary
