@@ -1,4 +1,3 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from peewee import *
@@ -24,7 +23,6 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///database.db")
 if DATABASE_URL.startswith("sqlite"):
     db = SqliteDatabase(DATABASE_URL.replace("sqlite:///", ""))
 else:
-    # لاحقاً يمكن استخدام PostgreSQL
     db = SqliteDatabase("database.db")
 
 # تعريف النموذج
@@ -98,6 +96,7 @@ def add_product():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ✅ تم إصلاح المسار هنا - إضافة <int:product_id>
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
 def update_product(product_id):
     try:
@@ -118,6 +117,7 @@ def update_product(product_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ✅ تم إصلاح المسار هنا - إضافة <int:product_id>
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 def delete_product(product_id):
     try:
