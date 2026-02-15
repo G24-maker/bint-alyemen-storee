@@ -1,12 +1,11 @@
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, text
-from sqlalchemy.orm import declarative_base, sessionmaker
+from peewee import *
 from datetime import datetime
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
@@ -21,43 +20,33 @@ CORS(app, resources={
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///database.db")
 
-# Create engine with proper configuration for SQLite
+# إعداد قاعدة البيانات
 if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        DATABASE_URL, 
-        connect_args={"check_same_thread": False},
-        echo=False
-    )
+    db = SqliteDatabase(DATABASE_URL.replace("sqlite:///", ""))
 else:
-    engine = create_engine(DATABASE_URL)
+    # لاحقاً يمكن استخدام PostgreSQL
+    db = SqliteDatabase("database.db")
 
-# Create session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# تعريف النموذج
+class Product(Model):
+    name = CharField(max_length=200)
+    description = TextField(default="")
+    price = FloatField()
+    image_url = CharField(max_length=500, default="")
+    category = CharField(max_length=100, default="عام")
+    created_at = DateTimeField(default=datetime.utcnow)
 
-# Product Model
-class Product(Base):
-    __tablename__ = "products"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False)
-    description = Column(String(500))
-    price = Column(Float, nullable=False)
-    image_url = Column(String(500))
-    category = Column(String(100))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    class Meta:
+        database = db
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# إنشاء الجداول
+db.connect()
+db.create_tables([Product], safe=True)
 
-# Health check endpoint
 @app.route('/api/health', methods=['GET'])
 def health_check():
     try:
-        # Test database connection
-        db = SessionLocal()
-        db.execute(text("SELECT 1"))
-        db.close()
+        db.execute_sql("SELECT 1")
         return jsonify({
             "status": "ok",
             "message": "السيرفر يعمل بكامل طاقته",
@@ -69,12 +58,10 @@ def health_check():
             "message": str(e)
         }), 500
 
-# Get all products
 @app.route('/api/products', methods=['GET'])
 def get_products():
-    db = SessionLocal()
     try:
-        products = db.query(Product).order_by(Product.created_at.desc()).all()
+        products = Product.select().order_by(Product.created_at.desc())
         return jsonify([{
             'id': p.id,
             'name': p.name,
@@ -86,20 +73,16 @@ def get_products():
         } for p in products]), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-    finally:
-        db.close()
 
-# Add new product
 @app.route('/api/products', methods=['POST'])
 def add_product():
-    db = SessionLocal()
     try:
         data = request.get_json()
         
         if not data or 'name' not in data or 'price' not in data:
             return jsonify({'error': 'الاسم والسعر مطلوبان'}), 400
         
-        new_product = Product(
+        product = Product.create(
             name=data.get('name'),
             description=data.get('description', ''),
             price=float(data.get('price')),
@@ -107,27 +90,18 @@ def add_product():
             category=data.get('category', 'عام')
         )
         
-        db.add(new_product)
-        db.commit()
-        db.refresh(new_product)
-        
         return jsonify({
             'message': 'تم إضافة المنتج بنجاح',
-            'id': new_product.id
+            'id': product.id
         }), 201
         
     except Exception as e:
-        db.rollback()
         return jsonify({'error': str(e)}), 500
-    finally:
-        db.close()
 
-# Update product
 @app.route('/api/products/<int:product_id>', methods=['PUT'])
 def update_product(product_id):
-    db = SessionLocal()
     try:
-        product = db.query(Product).filter(Product.id == product_id).first()
+        product = Product.get_or_none(Product.id == product_id)
         if not product:
             return jsonify({'error': 'المنتج غير موجود'}), 404
         
@@ -137,34 +111,25 @@ def update_product(product_id):
         product.price = float(data.get('price', product.price))
         product.image_url = data.get('image_url', product.image_url)
         product.category = data.get('category', product.category)
+        product.save()
         
-        db.commit()
         return jsonify({'message': 'تم تحديث المنتج بنجاح'}), 200
         
     except Exception as e:
-        db.rollback()
         return jsonify({'error': str(e)}), 500
-    finally:
-        db.close()
 
-# Delete product
 @app.route('/api/products/<int:product_id>', methods=['DELETE'])
 def delete_product(product_id):
-    db = SessionLocal()
     try:
-        product = db.query(Product).filter(Product.id == product_id).first()
+        product = Product.get_or_none(Product.id == product_id)
         if not product:
             return jsonify({'error': 'المنتج غير موجود'}), 404
         
-        db.delete(product)
-        db.commit()
+        product.delete_instance()
         return jsonify({'message': 'تم حذف المنتج بنجاح'}), 200
         
     except Exception as e:
-        db.rollback()
         return jsonify({'error': str(e)}), 500
-    finally:
-        db.close()
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
